@@ -4,25 +4,34 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 
-void printArray(int arr[], int len){
-    for (int i = 0; i < len; i++) {     
-        printf("%d ", arr[i]);     
+/**
+ * Opens file using open()
+ * Prints error message if file could not be opened
+ * @param filename 
+ * @return int 
+ */
+int openFile(char* filename){
+    int fp = open(filename, O_RDONLY);
+    if (fp == -1) {
+        printf("Error opening file\n");
+        exit(1);
     }
-    printf("\n");     
+    return fp;
 }
 
-int* sectorReader(int fptr, off_t byteOffset, int bytesToRead){
-    int* a;
-    a = (int*)malloc(bytesToRead * sizeof(int)); //dynamically creating array to hold bytes read
-    lseek(fptr, byteOffset, SEEK_SET); // jumps to byte offset from beginning of file
-    read(fptr, a, bytesToRead); // reads into a
-    return a;
+void sectorReader(int fp, off_t byteOffset, int bytesToRead){
+    char *buffer = (char *) calloc(500, sizeof(char));
+    lseek(fp, byteOffset, SEEK_CUR); // jumps to byte offset from beginning of file
+    read(fp, buffer, bytesToRead); // reads into buffer
+    printf("The bytes read are [%s]\n",buffer);
+    free(buffer);    
 }
+
 
 int main(void){
-    int fptr;
-    fptr = open("fat16.img",1);
-    printArray(sectorReader(fptr, 3, 5), 5); //printing bytes read (a)
-    close(fptr);
+    int fp = openFile("fat16.img");
+    sectorReader(fp, 0, 100000);
+    close(fp);
 }

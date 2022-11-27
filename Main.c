@@ -52,38 +52,49 @@ void printArray(uint16_t arr[], int len){
     printf("\n");
 }
 
-BootSector sectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector buffer){
+BootSector bootSectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector buffer){
     lseek(fp, byteOffset, SEEK_CUR); // jumps to byte offset 
     read(fp, &buffer, bytesToRead); // reads into buffer    
     return buffer;
 }
 
+uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
+    lseek(fp, (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_CUR);
+    read(fp, buffer, bs.BPB_BytsPerSec * bs.BPB_SecPerClus); 
+    return buffer;
+}
+
+
+/*uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* clustersArr){
+    
+} */
+
+
+
 int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
-    bs = sectorReader(fp, 0, sizeof(bs), bs);
-    //printf("%x\n",bs.BS_BootSig);
+    bs = bootSectorReader(fp, 0, sizeof(bs), bs); //reads Boot Sector into bs 
 
-    //go to FAT table
-    lseek(fp, sizeof(BootSector) + (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_SET); //skips reserved sectors
-    
-    //reading first FAT
-    int bytesPerClust = bs.BPB_BytsPerSec * bs.BPB_SecPerClus;
-    int bytesPerFAT = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
-    uint16_t array[bytesPerClust];
-    read(fp, array, bytesPerClust); 
+    uint16_t* clustersArr; 
+    clustersArr = fatReader(fp, bs, clustersArr); //navigates to first fat and reads into array
 
     uint16_t startingCluster;
     printf("Enter starting cluster: ");
     scanf("%" PRIu16, &startingCluster);
+
     uint16_t i = startingCluster;
-    uint16_t a = 0;
-    printf("%" PRIu16 "\n", startingCluster);
+    if (i == 0){
+        i = 1;
+    }
+    printf("%" PRIu16 "\n", i);
+
     while (i < 0xfff8){
         if (i == 0){
             i = 1;
-        }
-        i = array[i]; //indexing starting from 0?
+        } else{
+            i = clustersArr[i]; 
+        } 
         printf("%" PRIu16 "\n", i);
     }
 

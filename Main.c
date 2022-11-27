@@ -65,11 +65,21 @@ uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
 }
 
 
-/*uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* clustersArr){
-    
-} */
-
-
+void printsClustersInFile(uint16_t startingCluster, uint16_t* clustersArr){
+    uint16_t i = startingCluster;
+    if (i == 0){
+        i = 1;
+    }
+    printf("%" PRIu16 "\n", i);
+    while (i < 0xfff8){
+        if (i == 0){
+            i = 1;
+        } else{
+            i = clustersArr[i]; 
+        } 
+        printf("%" PRIu16 "\n", i);
+    }
+} 
 
 int main(void){
     int fp = openFile("fat16.img");
@@ -79,27 +89,11 @@ int main(void){
     uint16_t* clustersArr; 
     clustersArr = fatReader(fp, bs, clustersArr); //navigates to first fat and reads into array
 
-    uint16_t startingCluster;
+    uint16_t startingCluster; //user input
     printf("Enter starting cluster: ");
     scanf("%" PRIu16, &startingCluster);
 
-    uint16_t i = startingCluster;
-    if (i == 0){
-        i = 1;
-    }
-    printf("%" PRIu16 "\n", i);
-
-    while (i < 0xfff8){
-        if (i == 0){
-            i = 1;
-        } else{
-            i = clustersArr[i]; 
-        } 
-        printf("%" PRIu16 "\n", i);
-    }
-
-    //printArray(array, bytesPerClust);
-    //printf("%" PRIu16 "\n", array[0]);
+    printsClustersInFile(startingCluster, clustersArr); //prints clusters in file from starting cluster
 
     close(fp);
 }

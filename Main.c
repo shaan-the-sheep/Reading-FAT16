@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
+#include <inttypes.h>
 
 typedef struct __attribute__((__packed__)) {
 uint8_t BS_jmpBoot[ 3 ]; // x86 jump instr. to boot code
@@ -44,6 +45,13 @@ int openFile(char* filename){
     return fp;
 }
 
+void printArray(uint16_t arr[], int len){
+    for (int i = 0; i < len; i++) {
+        printf("%" PRIu16 "\n", arr[i]);
+    }
+    printf("\n");
+}
+
 BootSector sectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector buffer){
     lseek(fp, byteOffset, SEEK_CUR); // jumps to byte offset 
     read(fp, &buffer, bytesToRead); // reads into buffer    
@@ -54,6 +62,33 @@ int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
     bs = sectorReader(fp, 0, sizeof(bs), bs);
-    printf("%x\n",bs.BS_BootSig);
+    //printf("%x\n",bs.BS_BootSig);
+
+    //go to FAT table
+    lseek(fp, sizeof(BootSector) + (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_SET); //skips reserved sectors
+    
+    //reading first FAT
+    int bytesPerClust = bs.BPB_BytsPerSec * bs.BPB_SecPerClus;
+    int bytesPerFAT = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
+    uint16_t array[bytesPerClust];
+    read(fp, array, bytesPerClust); 
+
+    uint16_t startingCluster;
+    printf("Enter starting cluster: ");
+    scanf("%" PRIu16, &startingCluster);
+    uint16_t i = startingCluster;
+    uint16_t a = 0;
+    printf("%" PRIu16 "\n", startingCluster);
+    while (i < 0xfff8){
+        if (i == 0){
+            i = 1;
+        }
+        i = array[i]; //indexing starting from 0?
+        printf("%" PRIu16 "\n", i);
+    }
+
+    //printArray(array, bytesPerClust);
+    //printf("%" PRIu16 "\n", array[0]);
+
     close(fp);
 }

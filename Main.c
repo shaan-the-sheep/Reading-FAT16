@@ -64,21 +64,29 @@ uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
     return buffer;
 }
 
-
-void printsClustersInFile(uint16_t startingCluster, uint16_t* clustersArr){
-    uint16_t i = startingCluster;
-    if (i == 0){
-        i = 1;
+uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* fatArr, uint16_t* clustersArr){
+    uint16_t cluster = startingCluster;
+    int i = 0;
+    if (cluster == 0){
+        cluster = 1;
     }
-    printf("%" PRIu16 "\n", i);
-    while (i < 0xfff8){
-        if (i == 0){
-            i = 1;
+    //printf("%" PRIu16 "\n", cluster);
+    clustersArr[i] = cluster;
+    i++;
+    while (cluster < 0xfff8){
+        if (cluster == 0){
+            cluster = 1;
         } else{
-            i = clustersArr[i]; 
+            cluster = fatArr[cluster];
+            if (cluster == 0){
+                cluster = 1;
+            }  
         } 
-        printf("%" PRIu16 "\n", i);
+        //printf("%" PRIu16 "\n", cluster);
+            clustersArr[i] = cluster;
+            i++;
     }
+    return clustersArr;
 } 
 
 int main(void){
@@ -86,14 +94,15 @@ int main(void){
     BootSector bs;
     bs = bootSectorReader(fp, 0, sizeof(bs), bs); //reads Boot Sector into bs 
 
-    uint16_t* clustersArr; 
-    clustersArr = fatReader(fp, bs, clustersArr); //navigates to first fat and reads into array
+    uint16_t* fatArr; 
+    uint16_t* clustersArr;
+    fatArr = fatReader(fp, bs, fatArr); //navigates to first fat and reads into array
 
     uint16_t startingCluster; //user input
     printf("Enter starting cluster: ");
     scanf("%" PRIu16, &startingCluster);
 
-    printsClustersInFile(startingCluster, clustersArr); //prints clusters in file from starting cluster
+    clustersArr = clustersInFile(startingCluster, fatArr, clustersArr); //prints clusters in file from starting cluster
 
     close(fp);
 }

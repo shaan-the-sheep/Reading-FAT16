@@ -53,13 +53,13 @@ void printArray(uint16_t arr[], int len){
 }
 
 BootSector bootSectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector buffer){
-    lseek(fp, byteOffset, SEEK_CUR); // jumps to byte offset 
+    lseek(fp, byteOffset, SEEK_SET); // jumps to byte offset 
     read(fp, &buffer, bytesToRead); // reads into buffer    
     return buffer;
 }
 
 uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
-    lseek(fp, (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_CUR);
+    lseek(fp, (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_SET);
     read(fp, buffer, bs.BPB_BytsPerSec * bs.BPB_SecPerClus); 
     return buffer;
 }

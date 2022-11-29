@@ -121,7 +121,7 @@ int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
     bootSectorReader(fp, 0, sizeof(bs), &bs); //reads Boot Sector into bs 
-    printBSvalues(bs);
+    //printBSvalues(bs);
 
     uint16_t* fatArr; 
     uint16_t* clustersArr;
@@ -134,24 +134,32 @@ int main(void){
     clustersArr = clustersInFile(startingCluster, fatArr, clustersArr); //prints clusters in file from starting cluster
 
     //reading root directory
-    //RootDirectory rd;
-    //lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec), SEEK_SET);
+    /*
+    RootDirectory rd;
+
+    lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec), SEEK_SET);
     //read(fp, &rd, sizeof(rd));
     //printf("File size: %" PRIu32 "\n", rd.DIR_FileSize);
     //printf("Non zero DIR terminated string: %.*s\n", 11, rd.DIR_Name);
 
-/*
-    lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec), SEEK_SET);
-
-    for(int i=0; i<bs.BPB_RootEntCnt; i++) {
-        //lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec) + i, SEEK_SET);
+    for(int i=0; i<bs.BPB_RootEntCnt/sizeof(rd); i++) {
+        char entryType[20];
+        lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec) + i*sizeof(rd), SEEK_SET);
         read(fp, &rd, sizeof(rd));
         if (rd.DIR_Name[0] != 0x00 && rd.DIR_Name[0] != 0xE5){
-            printf( "Starting cluster: %" PRIu16 "\n", rd.DIR_FstClusHI);
-            //printf( "File: [%.8s.%.3s]\n", rd.DIR_Name);
+            printf("File size: %" PRIu32 "\n", rd.DIR_FileSize); 
         }
+        char entry[8];
+        sprintf(entry, "%hhu", rd.DIR_Attr); // turning into char array
+        if (entry[4] == 0 && entry[4] == 0){
+            //entryType[0] = "regular file";
+        }
+
+
     }
-        */
+    */
+    
+        
 
     close(fp);
 }

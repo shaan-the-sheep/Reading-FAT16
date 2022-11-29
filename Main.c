@@ -67,10 +67,9 @@ void printArray(uint16_t arr[], int len){
     printf("\n");
 }
 
-BootSector bootSectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector buffer){
+void bootSectorReader(int fp, off_t byteOffset, int bytesToRead, BootSector* buffer){
     lseek(fp, byteOffset, SEEK_SET); // jumps to byte offset 
-    read(fp, &buffer, bytesToRead); // reads into buffer    
-    return buffer;
+    read(fp, buffer, bytesToRead); // reads into buffer    
 }
 
 void printBSvalues(BootSector bs){
@@ -86,10 +85,9 @@ void printBSvalues(BootSector bs){
     printf("Non zero terminated string: %.*s\n", 11, bs.BS_VolLab);
 }
 
-uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
+void fatReader(int fp, BootSector bs, uint16_t* buffer){
     lseek(fp, (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_SET);
     read(fp, buffer, bs.BPB_BytsPerSec * bs.BPB_SecPerClus); 
-    return buffer;
 }
 
 uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* fatArr, uint16_t* clustersArr){
@@ -122,15 +120,15 @@ uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* fatArr, uint16_t* c
 int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
-    bs = bootSectorReader(fp, 0, sizeof(bs), bs); //reads Boot Sector into bs 
-    //printBSvalues(bs);
+    bootSectorReader(fp, 0, sizeof(bs), &bs); //reads Boot Sector into bs 
+    printBSvalues(bs);
 
     uint16_t* fatArr; 
     uint16_t* clustersArr;
-    fatArr = fatReader(fp, bs, fatArr); //navigates to first fat and reads into array
+    fatReader(fp, bs, fatArr); //navigates to first fat and reads into array
 
     uint16_t startingCluster; //user input
-    printf("Enter starting cluster: ");
+    printf("\nEnter starting cluster: ");
     scanf("%" PRIu16, &startingCluster);
 
     clustersArr = clustersInFile(startingCluster, fatArr, clustersArr); //prints clusters in file from starting cluster

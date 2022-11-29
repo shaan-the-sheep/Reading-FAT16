@@ -30,6 +30,21 @@ uint8_t BS_VolLab[ 11 ]; // Non zero terminated string
 uint8_t BS_FilSysType[ 8 ]; // e.g. 'FAT16 ' (Not 0 term.)
 } BootSector;
 
+typedef struct __attribute__((__packed__)) {
+uint8_t DIR_Name[ 11 ]; // Non zero terminated string
+uint8_t DIR_Attr; // File attributes
+uint8_t DIR_NTRes; // Used by Windows NT, ignore
+uint8_t DIR_CrtTimeTenth; // Tenths of sec. 0...199
+uint16_t DIR_CrtTime; // Creation Time in 2s intervals
+uint16_t DIR_CrtDate; // Date file created
+uint16_t DIR_LstAccDate; // Date of last read or write
+uint16_t DIR_FstClusHI; // Top 16 bits file's 1st cluster
+uint16_t DIR_WrtTime; // Time of last write
+uint16_t DIR_WrtDate; // Date of last write
+uint16_t DIR_FstClusLO; // Lower 16 bits file's 1st cluster
+uint32_t DIR_FileSize; // File size in bytes
+} RootDirectory;
+
 /**
  * Opens file using open()
  * Prints error message if file could not be opened
@@ -58,6 +73,19 @@ BootSector bootSectorReader(int fp, off_t byteOffset, int bytesToRead, BootSecto
     return buffer;
 }
 
+void printBSvalues(BootSector bs){
+    printf("BOOT SECTOR VALUES:\n");
+    printf("Bytes per sec: %" PRIu16 "\n", bs.BPB_BytsPerSec);
+    printf("Sectors per cluster: %" PRIu8 "\n", bs.BPB_SecPerClus);
+    printf("Reserved sector count: %" PRIu16 "\n", bs.BPB_RsvdSecCnt);
+    printf("Num of FATs: %" PRIu8 "\n", bs.BPB_NumFATs);
+    printf("Size of root DIR: %" PRIu16 "\n", bs.BPB_RootEntCnt);
+    printf("Num of sectors: %" PRIu16 "\n", bs.BPB_TotSec16);
+    printf("Sectors in FAT: %" PRIu16 "\n", bs.BPB_FATSz16);
+    printf("Sectors if totsec16 = 0: %" PRIu32 "\n", bs.BPB_TotSec32);
+    printf("Non zero terminated string: %.*s\n", 11, bs.BS_VolLab);
+}
+
 uint16_t* fatReader(int fp, BootSector bs, uint16_t* buffer){
     lseek(fp, (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec), SEEK_SET);
     read(fp, buffer, bs.BPB_BytsPerSec * bs.BPB_SecPerClus); 
@@ -70,7 +98,7 @@ uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* fatArr, uint16_t* c
     if (cluster == 0){
         cluster = 1;
     }
-    //printf("%" PRIu16 "\n", cluster);
+    printf("%" PRIu16 "\n", cluster);
     clustersArr[i] = cluster;
     i++;
     while (cluster < 0xfff8){
@@ -81,10 +109,12 @@ uint16_t* clustersInFile(uint16_t startingCluster, uint16_t* fatArr, uint16_t* c
             if (cluster == 0){
                 cluster = 1;
             }  
-        } 
-        //printf("%" PRIu16 "\n", cluster);
+        }
+        if (cluster < 0xfff8){  
+            printf("%" PRIu16 "\n", cluster);
             clustersArr[i] = cluster;
             i++;
+        }
     }
     return clustersArr;
 } 
@@ -93,6 +123,7 @@ int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
     bs = bootSectorReader(fp, 0, sizeof(bs), bs); //reads Boot Sector into bs 
+    //printBSvalues(bs);
 
     uint16_t* fatArr; 
     uint16_t* clustersArr;
@@ -103,6 +134,26 @@ int main(void){
     scanf("%" PRIu16, &startingCluster);
 
     clustersArr = clustersInFile(startingCluster, fatArr, clustersArr); //prints clusters in file from starting cluster
+
+    //reading root directory
+    //RootDirectory rd;
+    //lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec), SEEK_SET);
+    //read(fp, &rd, sizeof(rd));
+    //printf("File size: %" PRIu32 "\n", rd.DIR_FileSize);
+    //printf("Non zero DIR terminated string: %.*s\n", 11, rd.DIR_Name);
+
+/*
+    lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec), SEEK_SET);
+
+    for(int i=0; i<bs.BPB_RootEntCnt; i++) {
+        //lseek(fp, ((bs.BPB_RsvdSecCnt + (bs.BPB_NumFATs * bs.BPB_FATSz16)) * bs.BPB_BytsPerSec) + i, SEEK_SET);
+        read(fp, &rd, sizeof(rd));
+        if (rd.DIR_Name[0] != 0x00 && rd.DIR_Name[0] != 0xE5){
+            printf( "Starting cluster: %" PRIu16 "\n", rd.DIR_FstClusHI);
+            //printf( "File: [%.8s.%.3s]\n", rd.DIR_Name);
+        }
+    }
+        */
 
     close(fp);
 }

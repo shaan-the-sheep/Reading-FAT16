@@ -191,7 +191,7 @@ int main(void){
 
     // Read a dir entry at a time
     RootDirectory rootDirElem;
-    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
+    for(int i = 0; i < (bs.BPB_RootEntCnt); i++) {
         readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
 
         // Parse each dir entry and extract  the first/ starting cluster, the last modified time and date, the file attributes using a 
@@ -209,44 +209,44 @@ int main(void){
         if(attr & archive_mask){
             collectAttr[5] = 'A';
         }else{
-            collectAttr[5] = '/';
+            collectAttr[5] = '-';
         }
         if(attr & dir_mask){
             collectAttr[4] = 'D';
         }else{
-            collectAttr[4] = '/';
+            collectAttr[4] = '-';
         }
         if(attr & vol_mask){
             collectAttr[3] = 'V';
         }else{
-            collectAttr[3] = '/';
+            collectAttr[3] = '-';
         }
         if(attr & sys_mask){
             collectAttr[2] = 'S';
         }else{
-            collectAttr[2] = '/';
+            collectAttr[2] = '-';
         }
         if(attr & hidden_mask){
             collectAttr[1] = 'H';
         }else{
-            collectAttr[1] = '/';
+            collectAttr[1] = '-';
         }
         if(attr & readOnly_mask){
             collectAttr[0] = 'R';
         }else{
-            collectAttr[0] = '/';
+            collectAttr[0] = '-';
         }
 
-        if(collectAttr[3] == '/' && collectAttr[4] == 'D'){
+        if(collectAttr[3] == '-' && collectAttr[4] == 'D'){
             printf("Directory: [%.*s]\n", 8, rootDirElem.DIR_Name);
         }
-        else if (collectAttr[3] == 'V' && collectAttr[4] == '/'){
+        else if (collectAttr[3] == 'V' && collectAttr[4] == '-'){
             printf("Disk: [%.*s]\n", 8, rootDirElem.DIR_Name);
         }
         else if (collectAttr[0] == 'R' && collectAttr[1] == 'H' && collectAttr[2] == 'S' && collectAttr[3] == 'V' 
-     && collectAttr[4] == '/' && collectAttr[5] == '/'){
+            && collectAttr[4] == '-' && collectAttr[5] == '-'){
             printf("Ignore");
-        }else if (collectAttr[3] == '/' && collectAttr[4] == '/'){
+        }else if (collectAttr[3] == '-' && collectAttr[4] == '-'){
             printf("File name: %.*s\n", 11, rootDirElem.DIR_Name);
             printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
         }

@@ -179,6 +179,54 @@ int main(void){
     printf("root dir offset: %d\n", rootDir_offset);
     printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
 
+    uint16_t fstClusHi, fstClusLo, wrtTime, wrtData, attr;
+    uint32_t fileSize;
+
+    uint8_t archive_mask = 0x20;
+    uint8_t dir_mask = 0x10;
+    uint8_t vol_mask = 0x08;
+    uint8_t sys_mask = 0x04;
+    uint8_t hidden_mask = 0x02;
+    uint8_t readOnly_mask = 0x01;
+
+    // Read a dir entry at a time
+    RootDirectory rootDirElem;
+    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
+        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
+
+        // Parse each dir entry and extract  the first/ starting cluster, the last modified time and date, the file attributes using a 
+        // single letter for each, i.e., ADVSHR, with a – (dash/ hyphen) used to indicate an unset flag, the length 
+        // of the file, and finally the filename. Output should be formatted neatly in columns
+        fstClusHi = rootDirElem.DIR_FstClusHI;
+        fstClusLo = rootDirElem.DIR_FstClusLO;
+        wrtTime = rootDirElem.DIR_WrtTime;
+        wrtData = rootDirElem.DIR_WrtDate;
+        fileSize = rootDirElem.DIR_FileSize;
+
+        // Work out the attr flags
+        attr = rootDirElem.DIR_Attr;
+        char collectAttr[6];
+        if(attr & archive_mask)
+            collectAttr[5] = 'A';
+        if(attr & dir_mask)
+            collectAttr[4] = 'D';
+        if(attr & vol_mask)
+            collectAttr[3] = 'V';
+        if(attr & sys_mask)
+            collectAttr[2] = 'S';
+        if(attr & hidden_mask)
+            collectAttr[1] = 'H';
+        if(attr & readOnly_mask)
+            collectAttr[0] = 'R';
+
+        printf("File/Dir name: %.*s\n", 11, rootDirElem.DIR_Name);
+        printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
+
+        rootDir_offset += sizeof(RootDirectory);
+
+    } 
+
+
     close(fp);
 
 

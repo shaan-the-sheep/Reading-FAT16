@@ -121,7 +121,7 @@ int main(void){
     int fp = openFile("fat16.img");
     BootSector bs;
     bootSectorReader(fp, 0, sizeof(bs), &bs); //reads Boot Sector into bs 
-    //printBSvalues(bs);
+    printBSvalues(bs);
 
     uint16_t* fatArr; 
     uint16_t* clustersArr;

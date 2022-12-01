@@ -140,7 +140,7 @@ int main(void){
     // Task 2: Read boot sector
     fp = openFile(FILENAME);
     ssize_t bytesRead = readBytesAtOffset(fp, BOOT_SECTOR_OFFSET, sizeof(BootSector), &bs);
-    printf("read boot sector, Bytes read from file: %d\n", bytesRead);
+    printf("read boot sector, Bytes read from file: %zd\n", bytesRead);
     // Print bootsector values
     printBSvalues(bs);
 
@@ -149,9 +149,9 @@ int main(void){
     // a file
 
     // Calculate offset of fat1
-    printf("Byte Size of bootsector: %d\n", sizeof(BootSector));
+    printf("Byte Size of bootsector: %lu\n", sizeof(BootSector));
     off_t fat1_offset = bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec;
-    printf("Offset on fat1 table: %d\n", fat1_offset);
+    printf("Offset on fat1 table: %lld\n", fat1_offset);
 
     // Calulate total size of fat1 in bytes
     uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
@@ -176,7 +176,7 @@ int main(void){
 
     // Task 4: 
     off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
-    printf("root dir offset: %d\n", rootDir_offset);
+    printf("root dir offset: %llu\n", rootDir_offset);
     printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
 
     uint16_t fstClusHi, fstClusLo, wrtTime, wrtData, attr;
@@ -206,21 +206,53 @@ int main(void){
         // Work out the attr flags
         attr = rootDirElem.DIR_Attr;
         char collectAttr[6];
-        if(attr & archive_mask)
+        if(attr & archive_mask){
             collectAttr[5] = 'A';
-        if(attr & dir_mask)
+        }else{
+            collectAttr[5] = '/';
+        }
+        if(attr & dir_mask){
             collectAttr[4] = 'D';
-        if(attr & vol_mask)
+        }else{
+            collectAttr[4] = '/';
+        }
+        if(attr & vol_mask){
             collectAttr[3] = 'V';
-        if(attr & sys_mask)
+        }else{
+            collectAttr[3] = '/';
+        }
+        if(attr & sys_mask){
             collectAttr[2] = 'S';
-        if(attr & hidden_mask)
+        }else{
+            collectAttr[2] = '/';
+        }
+        if(attr & hidden_mask){
             collectAttr[1] = 'H';
-        if(attr & readOnly_mask)
+        }else{
+            collectAttr[1] = '/';
+        }
+        if(attr & readOnly_mask){
             collectAttr[0] = 'R';
+        }else{
+            collectAttr[0] = '/';
+        }
 
-        printf("File/Dir name: %.*s\n", 11, rootDirElem.DIR_Name);
-        printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
+        if(collectAttr[3] == '/' && collectAttr[4] == 'D'){
+            printf("Directory: [%.*s]\n", 8, rootDirElem.DIR_Name);
+        }
+        else if (collectAttr[3] == 'V' && collectAttr[4] == '/'){
+            printf("Disk: [%.*s]\n", 8, rootDirElem.DIR_Name);
+        }
+        else if (collectAttr[0] == 'R' && collectAttr[1] == 'H' && collectAttr[2] == 'S' && collectAttr[3] == 'V' 
+     && collectAttr[4] == '/' && collectAttr[5] == '/'){
+            printf("Ignore");
+        }else if (collectAttr[3] == '/' && collectAttr[4] == '/'){
+            printf("File name: %.*s\n", 11, rootDirElem.DIR_Name);
+            printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
+        }
+    
+        //printf("File name: %.*s\n", 11, rootDirElem.DIR_Name);
+        //printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
 
         rootDir_offset += sizeof(RootDirectory);
 

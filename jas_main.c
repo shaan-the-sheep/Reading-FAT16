@@ -98,63 +98,39 @@ ssize_t readBytesAtOffset(int fd, off_t offset, size_t numBytesToRead,
     return bytes_read;
 }
 
-// Alternate read byte by byte!!
-ssize_t readBytesAtOffsetByteByByte(int fd, off_t offset, size_t numBytesToRead,
-                            void* buffPtrToFill){
-    off_t ret = lseek(fd, offset, SEEK_SET);
-    if (ret == -1) {
-        printf("Error reading Fie\n");
-        exit(1);
-    }
-    int i;
-    for (i=0; i < numBytesToRead; ++i) {
-
-        if(read(fd, buffPtrToFill, 1) == -1) {
-            printf("readBytesAtOffsetByteByByte returned error\n");
-            exit(1);
-        }
-        buffPtrToFill++;
-    }
-    return i;
-}
-
-// Expects a File* fp that has been opened with "rb" flags (for read in binary format)
-ssize_t readBytesAtOffsetBinary(FILE* fp, off_t offset, size_t szBytes, size_t numItemsToRead,
-                            void* buffPtrToFill){
-    int ret = fseek(fp, (long)offset,SEEK_SET);
-    if (ret == -1) {
-        printf("Error reading Fie\n");
-        exit(1);
-    }
-
-    size_t numItems = fread(buffPtrToFill, szBytes, numItemsToRead, fp);
-    if ((numItems < numItemsToRead) || (numItems == 0)) {
-        printf("WARNING readBytesAtOffsetBinary() read %d items instead of %d\n", numItems, numItemsToRead);
-    }
-    return numItems;
-}
-
 BootSector bs;   // The boot-sector
 #define BOOT_SECTOR_OFFSET  0
 
 // temporary array to hold all the clusters of a file - make it 1024 elements for now
 uint16_t cluster_ids[1024];
 
-uint32_t findClustersStartingAt(uint16_t startCluster, uint16_t* fatPtr, uint16_t* clusterArr)
+#ifdef DONTDO
+uint32_t findClustersStartingAt(uint16_t startCluster, uint16_t* fatPtr, size_t elemsInfat1Table,
+                                uint16_t* collectClusterArr)
 {
-    // JUST PRINT the first 100 element
-    for(int i = 0 ; i < 100; ++i)
+    uint16_t ca_indx = 0;
+    uint16_t cluster_value;
+
+    // Find the startCluster
+    for(int i = 0 ; i < elemsInfat1Table; ++i)
     {
-        //printf("%d, ", *(clusterArr+i));
-        //printf("%" PRIu16 , *(clusterArr+i));
-        printf("%x", *(fatPtr+i));
+        if (fatPtr[i] == startCluster){
+            // Found start cluster
+            cluster_value = fatPtr[i];
+            collectClusterArr[ca_indx] = startCluster;
+            do {
+                c++;
+
+
+            } while (fatPtr[i] < 0xfff8);
+        }
     }
     printf("\n");
 
     return 0;
 }
+#endif
 
-//char* FILENAME  = "sine1_ch.wav";
 char* FILENAME  = "fat16.img";
 
 int main(void){
@@ -167,64 +143,43 @@ int main(void){
     printf("read boot sector, Bytes read from file: %d\n", bytesRead);
     // Print bootsector values
     printBSvalues(bs);
-    close(fp);
 
     // Task 3: load a copy of the first FAT into memory and that, given a starting
     // cluster number, you can produce an ordered list of all the clusters that make up 
     // a file
-    //fp = openFile(FILENAME);
-    // Open in binary mode
-    FILE* fp2 = fopen(FILENAME, "rb");
 
     // Calculate offset of fat1
     printf("Byte Size of bootsector: %d\n", sizeof(BootSector));
     off_t fat1_offset = bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec;
-    //off_t fat1_offset = (bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec);
     printf("Offset on fat1 table: %d\n", fat1_offset);
 
     // Calulate total size of fat1 in bytes
     uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
-    //uint32_t fat1_num_bytes = bs.BPB_TotSec16 * bs.BPB_BytsPerSec;
-    // try Shaan's ...
-    //uint32_t fat1_num_bytes = bs.BPB_SecPerClus * bs.BPB_BytsPerSec;
     printf("fat1_num_bytes: %d\n", fat1_num_bytes);
 
-    // Allocate dynamic array to hold fat1 - 16 bit ints
+    // Allocate dynamic array to hold fat1 (16 bit ints)
     uint16_t* fat1_table_ptr = (uint16_t*) malloc(fat1_num_bytes/2);
     if (fat1_table_ptr == NULL) {
         printf("Could not allocate memory for fat1\n");
         exit(1);
     }
+
     bytesRead = readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
-    //bytesRead = readBytesAtOffsetByteByByte(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
 
-    findClustersStartingAt(0, fat1_table_ptr, cluster_ids);
+    // findClustersStartingAt(0, fat1_table_ptr, fat1_num_bytes/2, cluster_ids);
 
-    /*** Read 16-bit value one at a time ***/
-    //HERE - use readBytesAtOffset multiple times reading 16bit at a time
-    /*
-    for (int i=0;  i < fat1_num_bytes/2; ++i) {
-        bytesRead = readBytesAtOffset((int)fp2, fat1_offset, 2, fat1_table_ptr);
-        fat1_offset += 2;
+    // PRINT MY FAT TABLE
+    for (int i = 0; i < 30; i++)
+    {
+        printf("%02X, ", fat1_table_ptr[i]);
     }
-    */
 
-    // Read FAT in binary format  THIS WORKS BUT MAYBE readBytesAtOffset also works
-    /*
-    size_t itemsRead = readBytesAtOffsetBinary(fp2, fat1_offset, 2, fat1_num_bytes/2, fat1_table_ptr);
-    printf("read fat1, items read from file: %d\n", itemsRead);
-    findClustersStartingAt(0, fat1_table_ptr, cluster_ids);
-    free(fat1_table_ptr);
-    */
+    // Task 4: 
+    off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
+    printf("root dir offset: %d\n", rootDir_offset);
+    printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
 
-    /*  UNESSAARRY
-    // Try with local stack array
-    uint16_t localArr[16384/2];
-    itemsRead = readBytesAtOffsetBinary(fp2, fat1_offset, 2, fat1_num_bytes/2, localArr);
-    findClustersStartingAt(0, fat1_table_ptr, cluster_ids);
-    */
-
-    fclose(fp2);
+    close(fp);
 
 
 }

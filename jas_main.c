@@ -47,6 +47,7 @@ uint32_t DIR_FileSize; // File size in bytes
 } RootDirectory;
 
 /**
+ * @brief 
  * Opens file using open()
  * Prints error message if file could not be opened
  * @param filename 
@@ -61,27 +62,37 @@ int openFile(char* filename){
     return fp;
 }
 
-void printArray(uint16_t arr[], int len){
-    for (int i = 0; i < len; i++) {
-        printf("%" PRIu16 "\n", arr[i]);
-    }
+/**
+ * @brief 
+ * Prints out boot sector values BootSector struct 
+ * @param bs 
+ */
+void printBSvalues(BootSector bs){
+    printf("BOOT SECTOR VALUES:\n");
+    printf("Bytes per sec: %d\n", bs.BPB_BytsPerSec);
+    printf("Sectors per cluster: %d\n", bs.BPB_SecPerClus);
+    printf("Reserved sector count: %d\n", bs.BPB_RsvdSecCnt);
+    printf("Num of FATs: %d\n", bs.BPB_NumFATs);
+    printf("Size of root DIR: %d\n", bs.BPB_RootEntCnt);
+    printf("Num of sectors: %d\n", bs.BPB_TotSec16);
+    printf("Sectors in FAT: %d\n", bs.BPB_FATSz16);
+    printf("Sectors if totsec16 = 0: %d\n", bs.BPB_TotSec32);
+    printf("Non zero terminated string: %.*s\n", 11, bs.BS_VolLab);
     printf("\n");
 }
 
-
-void printBSvalues(BootSector bs){
-    printf("BOOT SECTOR VALUES:\n");
-    printf("Bytes per sec: %" PRIu16 "\n", bs.BPB_BytsPerSec);
-    printf("Sectors per cluster: %" PRIu8 "\n", bs.BPB_SecPerClus);
-    printf("Reserved sector count: %" PRIu16 "\n", bs.BPB_RsvdSecCnt);
-    printf("Num of FATs: %" PRIu8 "\n", bs.BPB_NumFATs);
-    printf("Size of root DIR: %" PRIu16 "\n", bs.BPB_RootEntCnt);
-    printf("Num of sectors: %" PRIu16 "\n", bs.BPB_TotSec16);
-    printf("Sectors in FAT: %" PRIu16 "\n", bs.BPB_FATSz16);
-    printf("Sectors if totsec16 = 0: %" PRIu32 "\n", bs.BPB_TotSec32);
-    printf("Non zero terminated string: %.*s\n", 11, bs.BS_VolLab);
-}
-
+/**
+ * @brief 
+ * Jumps to byte offset in file
+ * Reads bytes from file to buffer 
+ * Returns buffer
+ * Prints error message if unable to read
+ * @param fd 
+ * @param offset 
+ * @param numBytesToRead 
+ * @param buffPtrToFill 
+ * @return ssize_t 
+ */
 ssize_t readBytesAtOffset(int fd, off_t offset, size_t numBytesToRead,
                             void* buffPtrToFill){
     off_t ret = lseek(fd, offset, SEEK_SET);
@@ -98,168 +109,132 @@ ssize_t readBytesAtOffset(int fd, off_t offset, size_t numBytesToRead,
     return bytes_read;
 }
 
-BootSector bs;   // The boot-sector
-#define BOOT_SECTOR_OFFSET  0
 
-// temporary array to hold all the clusters of a file - make it 1024 elements for now
-uint16_t cluster_ids[1024];
+/**
+ * @brief 
+ * Parses through last modified time using bit masking
+ * Returns formatted time string
+ * @param wrt_time 
+ * @param time_str 
+ */
+void parse_wrt_time(uint16_t wrt_time, char* time_str){
+    uint8_t secs, mins, hrs;
+    secs = wrt_time & 0x1F;
+    mins = (wrt_time >> 5) & 0x3F;
+    hrs = (wrt_time >> 11) & 0x1F;
+    sprintf(time_str, "Last modified time: %d:%d:%d", hrs, mins, secs);
+}
 
-#ifdef DONTDO
-uint32_t findClustersStartingAt(uint16_t startCluster, uint16_t* fatPtr, size_t elemsInfat1Table,
-                                uint16_t* collectClusterArr)
-{
-    uint16_t ca_indx = 0;
-    uint16_t cluster_value;
+/**
+ * @brief 
+ * Parses through last modified date using bit masking
+ * Returns formatted date string
+ * @param wrt_date 
+ * @param date_str 
+ */
+void parse_wrt_date(uint16_t wrt_date, char* date_str){
+    uint8_t day, month, year;
+    day = wrt_date & 0x1F;
+    month = (wrt_date >> 5) & 0xF;
+    year = (wrt_date >> 9) & 0x7F;
+    sprintf(date_str, "Last modified date: %d/%d/%d\n", day, month, year + 1980);
 
-    // Find the startCluster
-    for(int i = 0 ; i < elemsInfat1Table; ++i)
-    {
-        if (fatPtr[i] == startCluster){
-            // Found start cluster
-            cluster_value = fatPtr[i];
-            collectClusterArr[ca_indx] = startCluster;
-            do {
-                c++;
+}
 
+/**
+ * @brief
+ * Uses bit masking to work out the attribute flags
+ * If entry is for a regular file, output info
+ * 
+ * @param rootDirElem 
+ */
+void print_file_info(RootDirectory *rootDirElem){
+    uint16_t fstClusHi, fstClusLo, wrtTime, wrtDate, attr;
+    uint32_t fileSize;
 
-            } while (fatPtr[i] < 0xfff8);
+    attr = rootDirElem->DIR_Attr;
+    char collectAttr[6];
+    if(attr & 0x20){
+        collectAttr[5] = 'A';
+    }else{
+        collectAttr[5] = '-';
+    }
+    if(attr & 0x10){
+        collectAttr[4] = 'D';
+    }else{
+        collectAttr[4] = '-';
+    }
+    if(attr & 0x08){
+        collectAttr[3] = 'V';
+    }else{
+        collectAttr[3] = '-';
+    }
+    if(attr & 0x04){
+        collectAttr[2] = 'S';
+    }else{
+        collectAttr[2] = '-';
+    }
+    if(attr & 0x02){
+        collectAttr[1] = 'H';
+    }else{
+        collectAttr[1] = '-';
+    }
+    if(attr & 0x01){
+        collectAttr[0] = 'R';
+    }else{
+        collectAttr[0] = '-';
+    }
+    if (rootDirElem->DIR_Name[0] == 0x00 || rootDirElem->DIR_Name[0] == 0xE5){
+        return;
+    }
+    if (collectAttr[3] == '-' && collectAttr[4] == '-'){
+        if (!(collectAttr[0] == 'R' && collectAttr[1] == 'H' && collectAttr[2] == 'S' && collectAttr[3] == 'V')){ 
+            printf("File name: %.*s\n", 11, rootDirElem->DIR_Name);
+            printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", rootDirElem->DIR_FstClusHI, rootDirElem->DIR_FstClusLO, rootDirElem->DIR_FileSize, collectAttr);
+            char time_str[50];
+            parse_wrt_time(rootDirElem->DIR_WrtTime, time_str);
+            printf("%s\n", time_str);
+
+            char date_str[50];
+            parse_wrt_date(rootDirElem->DIR_WrtDate, date_str);
+            printf("%s\n", date_str);
         }
     }
-    printf("\n");
-
-    return 0;
 }
-#endif
 
 char* FILENAME  = "fat16.img";
+BootSector bs;   
+#define BOOT_SECTOR_OFFSET  0
 
 int main(void){
-
-    int fp;
-
-    // Task 2: Read boot sector
-    fp = openFile(FILENAME);
+    int fp = openFile(FILENAME);
+    // Task 2:
     ssize_t bytesRead = readBytesAtOffset(fp, BOOT_SECTOR_OFFSET, sizeof(BootSector), &bs);
-    printf("read boot sector, Bytes read from file: %zd\n", bytesRead);
-    // Print bootsector values
     printBSvalues(bs);
 
-    // Task 3: load a copy of the first FAT into memory and that, given a starting
-    // cluster number, you can produce an ordered list of all the clusters that make up 
-    // a file
-
+    // Task 3:
     // Calculate offset of fat1
-    printf("Byte Size of bootsector: %lu\n", sizeof(BootSector));
     off_t fat1_offset = bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec;
-    printf("Offset on fat1 table: %lld\n", fat1_offset);
 
     // Calulate total size of fat1 in bytes
     uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
-    printf("fat1_num_bytes: %d\n", fat1_num_bytes);
 
-    // Allocate dynamic array to hold fat1 (16 bit ints)
+    // Allocate dynamic array to hold fat1 
     uint16_t* fat1_table_ptr = (uint16_t*) malloc(fat1_num_bytes/2);
     if (fat1_table_ptr == NULL) {
         printf("Could not allocate memory for fat1\n");
         exit(1);
     }
-
     bytesRead = readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
-
-    // findClustersStartingAt(0, fat1_table_ptr, fat1_num_bytes/2, cluster_ids);
-
-    // PRINT MY FAT TABLE
-    for (int i = 0; i < 30; i++)
-    {
-        printf("%02X, ", fat1_table_ptr[i]);
-    }
 
     // Task 4: 
     off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
-    printf("root dir offset: %llu\n", rootDir_offset);
-    printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
-
-    uint16_t fstClusHi, fstClusLo, wrtTime, wrtData, attr;
-    uint32_t fileSize;
-
-    uint8_t archive_mask = 0x20;
-    uint8_t dir_mask = 0x10;
-    uint8_t vol_mask = 0x08;
-    uint8_t sys_mask = 0x04;
-    uint8_t hidden_mask = 0x02;
-    uint8_t readOnly_mask = 0x01;
 
     // Read a dir entry at a time
     RootDirectory rootDirElem;
     for(int i = 0; i < (bs.BPB_RootEntCnt); i++) {
-        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
-
-        // Parse each dir entry and extract  the first/ starting cluster, the last modified time and date, the file attributes using a 
-        // single letter for each, i.e., ADVSHR, with a – (dash/ hyphen) used to indicate an unset flag, the length 
-        // of the file, and finally the filename. Output should be formatted neatly in columns
-        fstClusHi = rootDirElem.DIR_FstClusHI;
-        fstClusLo = rootDirElem.DIR_FstClusLO;
-        wrtTime = rootDirElem.DIR_WrtTime;
-        wrtData = rootDirElem.DIR_WrtDate;
-        fileSize = rootDirElem.DIR_FileSize;
-
-        // Work out the attr flags
-        attr = rootDirElem.DIR_Attr;
-        char collectAttr[6];
-        if(attr & archive_mask){
-            collectAttr[5] = 'A';
-        }else{
-            collectAttr[5] = '-';
-        }
-        if(attr & dir_mask){
-            collectAttr[4] = 'D';
-        }else{
-            collectAttr[4] = '-';
-        }
-        if(attr & vol_mask){
-            collectAttr[3] = 'V';
-        }else{
-            collectAttr[3] = '-';
-        }
-        if(attr & sys_mask){
-            collectAttr[2] = 'S';
-        }else{
-            collectAttr[2] = '-';
-        }
-        if(attr & hidden_mask){
-            collectAttr[1] = 'H';
-        }else{
-            collectAttr[1] = '-';
-        }
-        if(attr & readOnly_mask){
-            collectAttr[0] = 'R';
-        }else{
-            collectAttr[0] = '-';
-        }
-
-        if(collectAttr[3] == '-' && collectAttr[4] == 'D'){
-            printf("Directory: [%.*s]\n", 8, rootDirElem.DIR_Name);
-        }
-        else if (collectAttr[3] == 'V' && collectAttr[4] == '-'){
-            printf("Disk: [%.*s]\n", 8, rootDirElem.DIR_Name);
-        }
-        else if (collectAttr[0] == 'R' && collectAttr[1] == 'H' && collectAttr[2] == 'S' && collectAttr[3] == 'V' 
-            && collectAttr[4] == '-' && collectAttr[5] == '-'){
-            printf("Ignore");
-        }else if (collectAttr[3] == '-' && collectAttr[4] == '-'){
-            printf("File name: %.*s\n", 11, rootDirElem.DIR_Name);
-            printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
-        }
-    
-        //printf("File name: %.*s\n", 11, rootDirElem.DIR_Name);
-        //printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
-
-        rootDir_offset += sizeof(RootDirectory);
-
+        readBytesAtOffset(fp, rootDir_offset + i*sizeof(rootDirElem), sizeof(RootDirectory), &rootDirElem);
+        print_file_info(&rootDirElem);
     } 
-
-
     close(fp);
-
-
 }

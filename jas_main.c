@@ -68,7 +68,7 @@ int openFile(char* filename){
  * @param bs 
  */
 void printBSvalues(BootSector bs){
-    printf("BOOT SECTOR VALUES:\n");
+    printf("\nBOOT SECTOR VALUES:\n");
     printf("Bytes per sec: %d\n", bs.BPB_BytsPerSec);
     printf("Sectors per cluster: %d\n", bs.BPB_SecPerClus);
     printf("Reserved sector count: %d\n", bs.BPB_RsvdSecCnt);
@@ -160,13 +160,13 @@ void parse_wrt_time(uint16_t wrt_time, char* time_str)
  * @param wrt_date 
  * @param date_str 
  */
-void parse_wrt_date(uint16_t wrt_date, char* date_str) {
+void parse_wrt_date(uint16_t wrt_date, char* date_str) 
+{
     uint8_t day, month, year;
     day = wrt_date & 0x1F;
     month = (wrt_date >> 5) & 0xF;
     year = (wrt_date >> 9) & 0x7F;
     sprintf(date_str, "Last modified date: %d/%d/%d\n", day, month, year + 1980);
-
 }
 
 // Task 5
@@ -298,19 +298,12 @@ void print_file_info(RootDirectory rootDirElem)
 
     if (!isValidDirEntry(rootDirElem))
         return;
-
-    if(collectAttr[volume_bit] == '-' && collectAttr[directory_bit] == 'D') {
-        printf("Directory: %s\n", dirNameArr);
-    }
-    else if (collectAttr[volume_bit] == 'V' && collectAttr[directory_bit] == '-') {
-        printf("Disk: %s\n",  dirNameArr);
-    }
     else if (!(collectAttr[read_only_bit] == 'R' && collectAttr[hidden_bit] == 'H' 
             && collectAttr[system_bit] == 'S' && collectAttr[volume_bit] == 'V' 
             && collectAttr[directory_bit] == '-' && collectAttr[archive_bit] == '-')) {
         if (checkIfRegularFile(rootDirElem.DIR_Attr) == 1) {
             printf("File name: %s\n", dirNameArr);
-            printf("Start ClusterHi: 0x%0x, Start ClusterLo: 0x%0x, file Len: 0x%0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
+            printf("Start ClusterHi: 0x%0x\nStart ClusterLo: 0x%0x\nFile Len: 0x%0x\nAttr: %s", fstClusHi, fstClusLo, fileSize, collectAttr);
             char time_str[50];
             parse_wrt_time(rootDirElem.DIR_WrtTime, time_str);
             printf("%s\n", time_str);
@@ -330,7 +323,8 @@ uint32_t printRegularFileContents(int fp,
                               uint16_t* clusterList, uint16_t clusterListSize)
 {
     // Check is a regular file
-    if(!checkIfRegularFile(rootDirEntry.DIR_Attr)) {
+    if(!checkIfRegularFile(rootDirEntry.DIR_Attr)) 
+    {
         //printf ("Not a regular file\n");
         return 0;
     }
@@ -343,7 +337,8 @@ uint32_t printRegularFileContents(int fp,
     {
         uint16_t thisCluster = clusterList[i];
 
-        if (numBytesToPrint < bytesPerCluster) {
+        if (numBytesToPrint < bytesPerCluster) 
+        {
 
             bytes_read = readFileDataAtCluster(
                                     fp, thisCluster,
@@ -364,7 +359,8 @@ uint32_t printRegularFileContents(int fp,
                                     bytesPerCluster,  // reading ALL of cluster
                                     file_data, FILE_DATA_BUFFER_SIZE);
             bytesReadSoFar += bytes_read;
-            if (bytesReadSoFar >= numBytesToPrint) {
+            if (bytesReadSoFar >= numBytesToPrint) 
+            {
                 // We've read all the bytes. Print them
                 printf("%s\n ", file_data);
                 printf("\n");
@@ -379,99 +375,110 @@ BootSector bs;
 #define BOOT_SECTOR_OFFSET  0
 
 int main(void){
-
+    // Task 1
+    // Opening img
     int fp;
-
-    // Task 2: Read boot sector
     fp = openFile(FILENAME);
-    ssize_t bytesRead = readBytesAtOffset(fp, BOOT_SECTOR_OFFSET, sizeof(BootSector), &bs);
-    //printf("read boot sector, Bytes read from file: %zd\n", bytesRead);
-    // Print bootsector values
-    printBSvalues(bs);
 
-    // Task 3: load a copy of the first FAT into memory and that, given a starting
-    // cluster number, you can produce an ordered list of all the clusters that make up 
-    // a file
+    // Task 2
+    // Reading boot sector
+    readBytesAtOffset(fp, BOOT_SECTOR_OFFSET, sizeof(BootSector), &bs);
 
-    // Calculate offset of fat1
-    printf("Byte Size of bootsector: %lu\n", sizeof(BootSector));
+    // Task 3
+    // Caluclating Fat1 offset 
+    // Calculating fat1 size
+    // Ptr to hold fat1 contents
     off_t fat1_offset = bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec;
-    printf("Offset on fat1 table: %lld\n", fat1_offset);
-
-    // Calulate total size of fat1 in bytes
-    uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
-    printf("fat1_num_bytes: %d\n", fat1_num_bytes);
-
-    // Allocate dynamic array to hold fat1 (16 bit ints)
+    uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;   
     uint16_t* fat1_table_ptr = (uint16_t*) malloc(fat1_num_bytes/2);
-    if (fat1_table_ptr == NULL) {
-        printf("Could not allocate memory for fat1\n");
-        exit(1);
-    }
+    readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
 
-    bytesRead = readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
-
-    // Task 4: 
-    off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
-    printf("root dir offset: %llu\n", rootDir_offset);
-    printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
-
-    // Read a dir entry at a time
+    // Task 4
+    // Creating rootdirectory object
+    // Calculating offset
     RootDirectory rootDirElem;
-    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
-        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
-        print_file_info(rootDirElem);
-        rootDir_offset += sizeof(RootDirectory);
-    } 
+    off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
 
+    // Creating menu
+    int task;
+    while (1){
+        printf("Task 2: Output Boot Sector values\nTask 3: Outut list of clusters that make up a file\nTask 4: Output the list of files in the Root Directory\nTask 5: Output contents of a file\nEnter 0 to exit\nPlease enter Task number: ");
+        scanf("%d", &task);
 
-    // Task 3: get ordered list of all the clusters that make up a file. cluster_ids hold all the clusters
-    int num_clusters_found = findClustersStartingAt(6, fat1_table_ptr, fat1_num_bytes/2, cluster_ids);
-    printf("Printing cluster Ids from FAT\n");
-    for(int i= 0; i < num_clusters_found; i++)
-        printf("%d, ", cluster_ids[i]);
-    printf("\n");
-
-
-    // Task 5
-    uint32_t byteSizeOfRootDirBlock = bs.BPB_RootEntCnt * sizeof(RootDirectory);
-    printf("%d\n", byteSizeOfRootDirBlock );
-    uint32_t startOffsetOfRootDirSection = (bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16) * bs.BPB_BytsPerSec;
-    uint32_t startOffsetOfDataSection = startOffsetOfRootDirSection  + byteSizeOfRootDirBlock;
-    printf("Start offset of data section: 0x%X\n", startOffsetOfDataSection);
-
-
-    // Want to test printRegularFileContents() - this is not how we want to do it for the tasks
-    // It's just a test to see if we can print out all regular files.
-
-    // Get all Regular files in RootDir
-    rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
-    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
-        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
-        rootDir_offset += sizeof(RootDirectory);
-
-        if (!isValidDirEntry(rootDirElem) || !checkIfRegularFile(rootDirElem.DIR_Attr))
-            continue;
-        else {
-            // Get cluster list for this rootDirElem
-            int num_clusters_found = findClustersStartingAt(rootDirElem.DIR_FstClusLO,
-                                                            fat1_table_ptr,
-                                                            fat1_num_bytes/2,
-                                                            cluster_ids);
-            // Debug
-            printf("Printing cluster Ids for root dir entry: %s\n", rootDirElem.DIR_Name);
+        if (task == 2)
+        {
+            printBSvalues(bs);
+        }
+        else if (task == 3)
+        {
+            if (fat1_table_ptr == NULL) 
+            {
+                printf("Could not allocate memory for fat1\n");
+                exit(1);
+            }
+            //reading fat1
+            //readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
+            uint16_t startingCluster;
+            printf("\nEnter starting cluster: ");
+            scanf("%d", &startingCluster);
+            int num_clusters_found = findClustersStartingAt(startingCluster, fat1_table_ptr, fat1_num_bytes/2, cluster_ids);
             for(int i= 0; i < num_clusters_found; i++)
-                printf("%d, ", cluster_ids[i]);
-            printf("\n");
+            {
+                printf("%d ", cluster_ids[i]);
+                printf("\n");
+            }
+        }
+        else if (task == 4)
+        {
+            for(int i = 0; i < bs.BPB_RootEntCnt; i++) 
+            {
+                readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
+                print_file_info(rootDirElem);
+                rootDir_offset += sizeof(RootDirectory);
+            }
+        }
+        else if (task == 5)
+        {
+            uint32_t byteSizeOfRootDirBlock = bs.BPB_RootEntCnt * sizeof(RootDirectory);
+            printf("%d\n", byteSizeOfRootDirBlock);
+            uint32_t startOffsetOfRootDirSection = (bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16) * bs.BPB_BytsPerSec;
+            uint32_t startOffsetOfDataSection = startOffsetOfRootDirSection  + byteSizeOfRootDirBlock;
+            printf("Start offset of data section: 0x%X\n", startOffsetOfDataSection);
 
-            printRegularFileContents(fp, startOffsetOfDataSection,
-                                    bs.BPB_BytsPerSec*bs.BPB_SecPerClus,
-                                    rootDirElem,
-                                    rootDirElem.DIR_FileSize, // print all of file
-                                    cluster_ids, num_clusters_found);
+            // Get all Regular files in RootDir
+            rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
+            for(int i = 0; i < bs.BPB_RootEntCnt; i++) 
+            {
+                readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
+                rootDir_offset += sizeof(RootDirectory);
+
+                if (!isValidDirEntry(rootDirElem) || !checkIfRegularFile(rootDirElem.DIR_Attr))
+                    continue;
+                else {
+                    // Get cluster list for this rootDirElem
+                    int num_clusters_found = findClustersStartingAt(rootDirElem.DIR_FstClusLO,
+                                                                fat1_table_ptr,
+                                                                fat1_num_bytes/2,
+                                                                cluster_ids);
+                    // Debug
+                    printf("Printing cluster Ids for root dir entry: %s\n", rootDirElem.DIR_Name);
+                    for(int i= 0; i < num_clusters_found; i++)
+                        printf("%d, ", cluster_ids[i]);
+                    printf("\n");
+
+                    printRegularFileContents(fp, startOffsetOfDataSection,
+                                        bs.BPB_BytsPerSec*bs.BPB_SecPerClus,
+                                        rootDirElem,
+                                        rootDirElem.DIR_FileSize, // print all of file
+                                        cluster_ids, num_clusters_found);
+                }
+            }
+        }
+        else if (task == 0)
+        {
+            return 1;
         }
     }
-
     close(fp);
 
 }

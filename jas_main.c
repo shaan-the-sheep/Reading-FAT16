@@ -110,6 +110,32 @@ ssize_t readBytesAtOffset(int fd, off_t offset, size_t numBytesToRead,
 }
 
 
+// temporary array to hold all the clusters of a file - make it 200 elements for now
+uint16_t cluster_ids[200];
+
+uint32_t findClustersStartingAt(uint16_t startCluster, uint16_t* fatPtr, size_t elemsInfat1Table,
+                                uint16_t* collectClusterArr)
+{
+
+    uint16_t prev_index, next_index;
+    uint16_t collectArr_index=0;
+
+    prev_index = startCluster;
+    collectClusterArr[collectArr_index++] = prev_index;
+
+    while (1) {
+        next_index = fatPtr[prev_index];
+        if (next_index >= 0xfff8){
+            return collectArr_index;
+        }
+        else {
+            collectClusterArr[collectArr_index++] = next_index;
+            prev_index = next_index;
+        }
+    }
+}
+
+
 /**
  * @brief 
  * Parses through last modified time using bit masking
@@ -117,8 +143,10 @@ ssize_t readBytesAtOffset(int fd, off_t offset, size_t numBytesToRead,
  * @param wrt_time 
  * @param time_str 
  */
-void parse_wrt_time(uint16_t wrt_time, char* time_str){
+void parse_wrt_time(uint16_t wrt_time, char* time_str)
+{
     uint8_t secs, mins, hrs;
+
     secs = wrt_time & 0x1F;
     mins = (wrt_time >> 5) & 0x3F;
     hrs = (wrt_time >> 11) & 0x1F;
@@ -132,13 +160,105 @@ void parse_wrt_time(uint16_t wrt_time, char* time_str){
  * @param wrt_date 
  * @param date_str 
  */
-void parse_wrt_date(uint16_t wrt_date, char* date_str){
+void parse_wrt_date(uint16_t wrt_date, char* date_str) {
     uint8_t day, month, year;
     day = wrt_date & 0x1F;
     month = (wrt_date >> 5) & 0xF;
     year = (wrt_date >> 9) & 0x7F;
     sprintf(date_str, "Last modified date: %d/%d/%d\n", day, month, year + 1980);
 
+}
+
+// Task 5
+#define FILE_DATA_BUFFER_SIZE 2048
+uint8_t file_data[FILE_DATA_BUFFER_SIZE];  // Hold some file data
+
+uint16_t readFileDataAtCluster(int fp, uint16_t clusterNum,
+                               uint32_t startOffsetOfDataSectionInBytes,
+                               uint32_t bytesPerCluster,
+                               uint32_t numBytesToRead,
+                               uint8_t* dataBuffer, uint16_t dataBufferSize)
+{
+    if (numBytesToRead > dataBufferSize) {
+        printf("Max bytes to read exceeded, reading %d bytes\n", dataBufferSize);
+        numBytesToRead = dataBufferSize;
+    }
+    clusterNum -= 2; // Adjust cluster number
+
+    // Empty the dataBuffer
+    memset(dataBuffer, '\0', dataBufferSize);
+
+    uint32_t read_offset = startOffsetOfDataSectionInBytes + (clusterNum * bytesPerCluster);
+    // DEBUG
+    //printf("In readFileDataAtCluster(): reading adjusted cluster 0x%x at byte addr: 0x%x\n",
+    //              clusterNum  , read_offset);
+    size_t bytes_read = readBytesAtOffset(fp, read_offset, numBytesToRead, dataBuffer);
+    return bytes_read;
+}
+
+#define archive_mask    0x20
+#define dir_mask        0x10
+#define vol_mask        0x08
+#define sys_mask        0x04
+#define hidden_mask     0x02
+#define readOnly_mask   0x01
+
+#define read_only_bit   0x0
+#define hidden_bit      0x01
+#define system_bit      0x02
+#define volume_bit      0x03
+#define directory_bit   0x04
+#define archive_bit     0x05
+
+void createAttrString(uint8_t attr, char* collectAttr)
+{
+    collectAttr[6] = '\n';
+    if(attr & archive_mask)
+        collectAttr[archive_bit] = 'A';
+    else
+        collectAttr[archive_bit] = '-';
+
+    if(attr & dir_mask)
+        collectAttr[directory_bit] = 'D';
+    else
+        collectAttr[directory_bit] = '-';
+    
+    if(attr & vol_mask)
+        collectAttr[volume_bit] = 'V';
+    else
+        collectAttr[volume_bit] = '-';
+    
+    if(attr & sys_mask)
+        collectAttr[system_bit] = 'S';
+    else
+        collectAttr[system_bit] = '-';
+    
+    if(attr & hidden_mask)
+        collectAttr[hidden_bit] = 'H';
+    else
+        collectAttr[hidden_bit] = '-';
+    
+    if(attr & readOnly_mask)
+        collectAttr[read_only_bit] = 'R';
+    else
+        collectAttr[read_only_bit] = '-';
+}
+
+uint8_t checkIfRegularFile(uint8_t attr)
+{
+    if ((attr & vol_mask) && (attr & dir_mask))
+        return 0;
+    else
+        return 1;
+}
+
+// Checks if empty or deleted root dir entry
+uint8_t isValidDirEntry(RootDirectory dirEntry)
+{
+    if (dirEntry.DIR_Name[0] == 0x00 || dirEntry.DIR_Name[0] == 0xE5)
+        return 0;
+    else
+        return 1;
 }
 
 /**
@@ -148,58 +268,110 @@ void parse_wrt_date(uint16_t wrt_date, char* date_str){
  * 
  * @param rootDirElem 
  */
-void print_file_info(RootDirectory *rootDirElem){
-    uint16_t fstClusHi, fstClusLo, wrtTime, wrtDate, attr;
-    uint32_t fileSize;
+void print_file_info(RootDirectory rootDirElem)
+{
+    // Parse dir entry and extract  the first/ starting cluster, the last modified time and date, the file attributes using a 
+    // single letter for each, i.e., ADVSHR, with a – (dash/ hyphen) used to indicate an unset flag, the length 
+    // of the file, and finally the filename. Output should be formatted neatly in columns
 
-    attr = rootDirElem->DIR_Attr;
-    char collectAttr[6];
-    if(attr & 0x20){
-        collectAttr[5] = 'A';
-    }else{
-        collectAttr[5] = '-';
+    uint16_t fstClusHi, fstClusLo, wrtTime, wrtDate;
+    uint32_t fileSize;
+    uint8_t dirNameArr[11];
+
+    fstClusHi = rootDirElem.DIR_FstClusHI;
+    fstClusLo = rootDirElem.DIR_FstClusLO;
+    wrtTime = rootDirElem.DIR_WrtTime;
+    wrtDate = rootDirElem.DIR_WrtDate;
+    fileSize = rootDirElem.DIR_FileSize;
+    memcpy ( &dirNameArr, &rootDirElem.DIR_Name , 11);
+    // Make dir name null terminated
+    for (int i = 0; i < 11; i++) {
+        if (dirNameArr[i] == 0x20) {
+            dirNameArr[i] = '\0';
+            break;
+        }
     }
-    if(attr & 0x10){
-        collectAttr[4] = 'D';
-    }else{
-        collectAttr[4] = '-';
-    }
-    if(attr & 0x08){
-        collectAttr[3] = 'V';
-    }else{
-        collectAttr[3] = '-';
-    }
-    if(attr & 0x04){
-        collectAttr[2] = 'S';
-    }else{
-        collectAttr[2] = '-';
-    }
-    if(attr & 0x02){
-        collectAttr[1] = 'H';
-    }else{
-        collectAttr[1] = '-';
-    }
-    if(attr & 0x01){
-        collectAttr[0] = 'R';
-    }else{
-        collectAttr[0] = '-';
-    }
-    if (rootDirElem->DIR_Name[0] == 0x00 || rootDirElem->DIR_Name[0] == 0xE5){
+
+    // Work out the attr flags
+    char collectAttr[6+1];
+    createAttrString(rootDirElem.DIR_Attr, collectAttr);
+
+    if (!isValidDirEntry(rootDirElem))
         return;
+
+    if(collectAttr[volume_bit] == '-' && collectAttr[directory_bit] == 'D') {
+        printf("Directory: %s\n", dirNameArr);
     }
-    if (collectAttr[3] == '-' && collectAttr[4] == '-'){
-        if (!(collectAttr[0] == 'R' && collectAttr[1] == 'H' && collectAttr[2] == 'S' && collectAttr[3] == 'V')){ 
-            printf("File name: %.*s\n", 11, rootDirElem->DIR_Name);
-            printf("Start ClusterHi: %0x, Start ClusterLo: %0x, file Len: %0x, attr: %s\n", rootDirElem->DIR_FstClusHI, rootDirElem->DIR_FstClusLO, rootDirElem->DIR_FileSize, collectAttr);
+    else if (collectAttr[volume_bit] == 'V' && collectAttr[directory_bit] == '-') {
+        printf("Disk: %s\n",  dirNameArr);
+    }
+    else if (!(collectAttr[read_only_bit] == 'R' && collectAttr[hidden_bit] == 'H' 
+            && collectAttr[system_bit] == 'S' && collectAttr[volume_bit] == 'V' 
+            && collectAttr[directory_bit] == '-' && collectAttr[archive_bit] == '-')) {
+        if (checkIfRegularFile(rootDirElem.DIR_Attr) == 1) {
+            printf("File name: %s\n", dirNameArr);
+            printf("Start ClusterHi: 0x%0x, Start ClusterLo: 0x%0x, file Len: 0x%0x, attr: %s\n", fstClusHi, fstClusLo, fileSize, collectAttr);
             char time_str[50];
-            parse_wrt_time(rootDirElem->DIR_WrtTime, time_str);
+            parse_wrt_time(rootDirElem.DIR_WrtTime, time_str);
             printf("%s\n", time_str);
 
             char date_str[50];
-            parse_wrt_date(rootDirElem->DIR_WrtDate, date_str);
+            parse_wrt_date(rootDirElem.DIR_WrtDate, date_str);
             printf("%s\n", date_str);
         }
     }
+}
+
+// Prints all data from a file (assumes it is a text file)
+uint32_t printRegularFileContents(int fp,
+                              uint32_t startOffsetOfDataSectionInBytes,
+                              uint32_t bytesPerCluster,
+                              RootDirectory rootDirEntry, uint32_t numBytesToPrint,
+                              uint16_t* clusterList, uint16_t clusterListSize)
+{
+    // Check is a regular file
+    if(!checkIfRegularFile(rootDirEntry.DIR_Attr)) {
+        //printf ("Not a regular file\n");
+        return 0;
+    }
+    uint32_t bytesReadSoFar = 0;
+    uint16_t startCluster = rootDirEntry.DIR_FstClusLO;
+    uint16_t bytes_read; 
+
+    // Go to each cluster and read data until we have read numBytesToPrint in total
+    for (int i=0; i < clusterListSize; i++)
+    {
+        uint16_t thisCluster = clusterList[i];
+
+        if (numBytesToPrint < bytesPerCluster) {
+
+            bytes_read = readFileDataAtCluster(
+                                    fp, thisCluster,
+                                    startOffsetOfDataSectionInBytes,
+                                    bytesPerCluster,
+                                    numBytesToPrint,
+                                    file_data, FILE_DATA_BUFFER_SIZE);
+            // We've read all the bytes. Print them
+            printf("%s\n ", file_data);
+            printf("\n");
+        }
+        else {
+            // read all of this cluster
+            bytes_read = readFileDataAtCluster(
+                                    fp, thisCluster,
+                                    startOffsetOfDataSectionInBytes,
+                                    bytesPerCluster,
+                                    bytesPerCluster,  // reading ALL of cluster
+                                    file_data, FILE_DATA_BUFFER_SIZE);
+            bytesReadSoFar += bytes_read;
+            if (bytesReadSoFar >= numBytesToPrint) {
+                // We've read all the bytes. Print them
+                printf("%s\n ", file_data);
+                printf("\n");
+            }
+        }
+    }
+    return bytesReadSoFar;
 }
 
 char* FILENAME  = "fat16.img";
@@ -207,34 +379,100 @@ BootSector bs;
 #define BOOT_SECTOR_OFFSET  0
 
 int main(void){
-    int fp = openFile(FILENAME);
-    // Task 2:
+
+    int fp;
+
+    // Task 2: Read boot sector
+    fp = openFile(FILENAME);
     ssize_t bytesRead = readBytesAtOffset(fp, BOOT_SECTOR_OFFSET, sizeof(BootSector), &bs);
+    //printf("read boot sector, Bytes read from file: %zd\n", bytesRead);
+    // Print bootsector values
     printBSvalues(bs);
 
-    // Task 3:
+    // Task 3: load a copy of the first FAT into memory and that, given a starting
+    // cluster number, you can produce an ordered list of all the clusters that make up 
+    // a file
+
     // Calculate offset of fat1
+    printf("Byte Size of bootsector: %lu\n", sizeof(BootSector));
     off_t fat1_offset = bs.BPB_RsvdSecCnt * bs.BPB_BytsPerSec;
+    printf("Offset on fat1 table: %lld\n", fat1_offset);
 
     // Calulate total size of fat1 in bytes
     uint32_t fat1_num_bytes = bs.BPB_FATSz16 * bs.BPB_BytsPerSec;
+    printf("fat1_num_bytes: %d\n", fat1_num_bytes);
 
-    // Allocate dynamic array to hold fat1 
+    // Allocate dynamic array to hold fat1 (16 bit ints)
     uint16_t* fat1_table_ptr = (uint16_t*) malloc(fat1_num_bytes/2);
     if (fat1_table_ptr == NULL) {
         printf("Could not allocate memory for fat1\n");
         exit(1);
     }
+
     bytesRead = readBytesAtOffset(fp, fat1_offset, fat1_num_bytes, fat1_table_ptr);
 
     // Task 4: 
     off_t rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
+    printf("root dir offset: %llu\n", rootDir_offset);
+    printf("%d\n",  bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16);
 
     // Read a dir entry at a time
     RootDirectory rootDirElem;
-    for(int i = 0; i < (bs.BPB_RootEntCnt); i++) {
-        readBytesAtOffset(fp, rootDir_offset + i*sizeof(rootDirElem), sizeof(RootDirectory), &rootDirElem);
-        print_file_info(&rootDirElem);
+    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
+        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
+        print_file_info(rootDirElem);
+        rootDir_offset += sizeof(RootDirectory);
     } 
+
+
+    // Task 3: get ordered list of all the clusters that make up a file. cluster_ids hold all the clusters
+    int num_clusters_found = findClustersStartingAt(6, fat1_table_ptr, fat1_num_bytes/2, cluster_ids);
+    printf("Printing cluster Ids from FAT\n");
+    for(int i= 0; i < num_clusters_found; i++)
+        printf("%d, ", cluster_ids[i]);
+    printf("\n");
+
+
+    // Task 5
+    uint32_t byteSizeOfRootDirBlock = bs.BPB_RootEntCnt * sizeof(RootDirectory);
+    printf("%d\n", byteSizeOfRootDirBlock );
+    uint32_t startOffsetOfRootDirSection = (bs.BPB_RsvdSecCnt + bs.BPB_NumFATs * bs.BPB_FATSz16) * bs.BPB_BytsPerSec;
+    uint32_t startOffsetOfDataSection = startOffsetOfRootDirSection  + byteSizeOfRootDirBlock;
+    printf("Start offset of data section: 0x%X\n", startOffsetOfDataSection);
+
+
+    // Want to test printRegularFileContents() - this is not how we want to do it for the tasks
+    // It's just a test to see if we can print out all regular files.
+
+    // Get all Regular files in RootDir
+    rootDir_offset = fat1_offset + fat1_num_bytes * bs.BPB_NumFATs;
+    for(int i = 0; i < bs.BPB_RootEntCnt; i++) {
+        readBytesAtOffset(fp, rootDir_offset, sizeof(RootDirectory), &rootDirElem);
+        rootDir_offset += sizeof(RootDirectory);
+
+        if (!isValidDirEntry(rootDirElem) || !checkIfRegularFile(rootDirElem.DIR_Attr))
+            continue;
+        else {
+            // Get cluster list for this rootDirElem
+            int num_clusters_found = findClustersStartingAt(rootDirElem.DIR_FstClusLO,
+                                                            fat1_table_ptr,
+                                                            fat1_num_bytes/2,
+                                                            cluster_ids);
+            // Debug
+            printf("Printing cluster Ids for root dir entry: %s\n", rootDirElem.DIR_Name);
+            for(int i= 0; i < num_clusters_found; i++)
+                printf("%d, ", cluster_ids[i]);
+            printf("\n");
+
+            printRegularFileContents(fp, startOffsetOfDataSection,
+                                    bs.BPB_BytsPerSec*bs.BPB_SecPerClus,
+                                    rootDirElem,
+                                    rootDirElem.DIR_FileSize, // print all of file
+                                    cluster_ids, num_clusters_found);
+        }
+    }
+
     close(fp);
+
 }
+
